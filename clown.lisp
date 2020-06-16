@@ -112,18 +112,18 @@
            (lambda (n)                        ; note value is the tine buffer
              (aref sc-user::*tine-samples* (1- n))))
         (handler-case
-            (do ((old-sstep nil sstep)
-                 (sstep (sstep sstate) (sstep sstate))
-                 (num (num sstate) (num sstate)))
-                ((and (listen) (char= (read-char) #\q))
-                 (end-sequence *sequencer*)
-                 (bt:join-thread loop-thread))
-              (when (and old-sstep (not (eq sstep old-sstep)))
-                (format t "~d: ~d (~f -> ~f)~%" num (note sstep) (step-time sstep) (duration sstep))
-                (sleep 0.01)))
-          (sb-sys:interactive-interrupt () (progn
-                                             (end-sequence *sequencer*)
-                                             (bt:join-thread loop-thread)))))
+            (flet ((finish ()
+                     (finish-sequence *sequencer* 5.0) ; Slow sequence over 5 seconds
+                     (bt:join-thread loop-thread)))
+              (do ((old-sstep nil sstep)
+                   (sstep (sstep sstate) (sstep sstate))
+                   (num (num sstate) (num sstate)))
+                  ((and (listen) (char= (read-char) #\q))
+                   (finish))
+                (when (and old-sstep (not (eq sstep old-sstep)))
+                  (format t "~d: ~d (~f -> ~f)~%" num (note sstep) (step-time sstep) (duration sstep))
+                  (sleep 0.01))))
+          (sb-sys:interactive-interrupt () (finish))))
       (format t "Complete~%")
 
       (sc:server-quit sc:*s*))

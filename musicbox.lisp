@@ -27,8 +27,6 @@
   "Returns the equal temperment frequency for the nth step above (or below) the base note."
   (* base (expt 2.0 (/ n 12.0))))
 
-;(defvar *base-note* (* 440 (equal-temp 3))) ;; Middle C
-
 (defvar *ionian*
   '(0 2 4 5 7 9 11))
 
@@ -95,8 +93,9 @@
 (defgeneric finished-p (sequencer)
   (:documentation "Returns whether the sequencer is finished playing"))
 
-(defgeneric end-sequence (sequencer)
-  (:documentation "Ends a sequence"))
+(defgeneric finish-sequence (sequencer finish-time &optional mult)
+  (:documentation
+   "Finishes a sequence by progressively slowing it down over the finish-time and then setting the finished-p flag."))
 
 (defgeneric note (step)
   (:documentation "Gets the next note from a sequence step"))
@@ -170,8 +169,16 @@
                    :loop-end-p loop-end-p
                    :last-note-p last-note-p)))
 
-(defmethod end-sequence ((seq sequencer))
-  (setf (finished-p seq) t))
+(defmethod finish-sequence ((seq sequencer) finish-time &optional (mult 5.0))
+  (bt:make-thread
+   (lambda ()
+     (let* ((sleep-time 0.1)
+            (stretch-inc (expt mult (/ 1.0 (/ finish-time sleep-time)))))
+       (do ((time-left finish-time (- time-left sleep-time))
+            (stretch (time-stretch seq) (* stretch stretch-inc)))
+           ((<= time-left 0) (setf (finished-p seq) t))
+         (setf (time-stretch seq) stretch)
+         (sleep sleep-time))))))
 
 (defclass seq-step ()
   ((note
@@ -232,6 +239,6 @@
                (scheduling-loop ()
                  (do* ((offset (+ 0.1 (sc:now)) (+ offset wait-time))
                        (wait-time (schedule-note offset 0) (schedule-note offset 0)))
-                      ((finished-p sequencer))
+                      ((finished-p sequencer) (sleep 3)) ;; Finish by sleeping 3 seconds to let the note tail die
                    )))
         (values (bt:make-thread #'scheduling-loop :name "loop") state))))
