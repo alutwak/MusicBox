@@ -1,7 +1,22 @@
 ;(declaim (optimize (debug 3)))
 
-(ql:quickload "png")
-(ql:quickload :array-operations)
+;; (ql:quickload "png")
+;; (ql:quickload :array-operations)
+
+(in-package #:cl-user)
+
+(defpackage #:audio-electric-image-extract
+  (:documentation "Extracts notes from an image")
+  (:nicknames :aeie :ae-image-extract)
+  (:use #:common-lisp)
+  (:export
+   :extract-image
+   :create-sequence
+   :loop-time
+   :tines
+   :sequence))
+
+(in-package #:aeie)
 
 (defclass element ()
   ((mass :initform 0
@@ -442,13 +457,6 @@
         ((= ndestroyed 0) (remove-small-clusters clusters min-size)))))
 
 
-;; (defvar im (get-image "~/Documents/AudioDesigns/code/MusicBox/MusicBox-improved.png"))
-;; (defvar pixels (get-nonzero-pixels im 10))
-;; (defvar clusters (nk-means pixels 0.6 50 50))
-;; (defvar bars (sort (k-means clusters (init-clusters clusters 12))
-;;                    (lambda (bar1 bar2)
-;;                      (> (moment bar1) (moment bar2)))))
-
 (defun extract-image (image-path &optional (pixel-thresh 10) (min-density 0.6) (min-dist 50) (min-size 50) (nbars 12))
   (let* ((image (get-image image-path))                 ; The image
          (loop-time (png:image-width image))            ; The loop time will be the width of the image
@@ -483,52 +491,3 @@
                            notes))))))))
 
 
-;; (defun meanheight (clusters start n)
-;;   (let* ((len (length clusters))
-;;          (sublist (butlast (nthcdr start clusters) (- len start n))))
-;;     (/                                  ; Divide the length
-;;      (reduce #'+                        ; Compute the sum
-;;              (mapcar (lambda (c)        ; Extract the cluster moments' heights
-;;                        (car (cluster-moment c)))
-;;                      sublist))
-;;      n)))
-
-;; (defvar bar-cluster-sizes ; (<note number> . <number of clusters>
-;;   '((12 . 2)  
-;;     (11 . 4)
-;;     (10 . 4)
-;;     (9 . 3)
-;;     (8 . 4)
-;;     (7 . 6)
-;;     (6 . 2)
-;;     (5 . 7)
-;;     (4 . 7)   
-;;     (3 . 5)   
-;;     (2 . 6)   
-;;     (1 . 6)))
-
-;; (defun calc-bar-levels (b-c-s clusters)
-;;   (let ((n (cdar b-c-s)))
-;;    (cons
-;;     `(,(caar b-c-s) ,(meanheight clusters 0 n))
-;;     (if (cdr b-c-s)
-;;         (calc-bar-levels (cdr b-c-s) (nthcdr n clusters))
-;;         nil))))
-
-;; (defun split-bars (b-c-s clusters)
-;;   (let ((n (cdar b-c-s)))
-;;    (cons
-;;     `(,(caar b-c-s) ,(butlast clusters (- (length clusters) n)))
-;;     (if (cdr b-c-s)
-;;         (split-bars (cdr b-c-s) (nthcdr n clusters))
-;;         nil))))
-
-;; (defvar staff-clusters (split-bars bar-cluster-sizes (mapcar #'moment ordered-notes)))
-;; (defvar staff-times (mapcar
-;;                      (lambda (s-c)
-;;                        `(,(car s-c)
-;;                          ,(sort (mapcar (lambda (mom)
-;;                                      (cadr mom))
-;;                                    (cadr s-c))
-;;                                 #'<)))
-;;                      staff-clusters))

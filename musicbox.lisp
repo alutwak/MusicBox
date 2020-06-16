@@ -1,77 +1,86 @@
 
-(ql:quickload :cl-collider)
+(defpackage #:audio-electric-musicbox
+  (:documentation "Plays a music box")
+  (:nicknames :aemb :ae-musicbox)
+  (:use #:common-lisp #:aeie #:sc-user)
+  (:export
+   :init-music-box
+   :play-score
+   :note->freq
+   :play-sequence
 
-(load "notes.lisp")
+   ;; sequencer
+   :sequencer
+   :loop-time
+   :time-stretch
+   :finished-p
+   :end-sequence))
 
-;(defvar *s* (make-external-server "localhost" :port 57110 :just-connect-p t))
-(setf sc:*s* (sc:make-external-server "localhost" :port 48800))
-(sc:server-boot sc::*s*)
+(in-package :aemb)
 
-(defun equal-temp (n)
-  (expt 2.0 (/ n 12.0)))
+(defmacro init-music-box ()
+  (setf sc:*s* (sc:make-external-server "localhost" :port 48800))
+  (sc:server-boot sc::*s*))
 
-(defun create-score (staff-times)
-  (reverse (do ((score nil)
-        (last-time 0))
-       ((notany #'cdr staff-times) score)
-     (let* ((next-time most-positive-double-float)
-            (next-bar))
-       (pop (cdr                               ; This is the next time
-             (dolist (bar staff-times next-bar) ; Search the staff for the next time
-               ;(break)
-               (when (and (consp (cdr bar)) (< (cadr bar) next-time))
-                 (setq next-bar bar)
-                 (setq next-time (cadr bar))))))
-       (setq score (cons `(,(- next-time last-time) . ,(car next-bar)) score))
-       (setq last-time next-time)))))
+(defun equal-temp (base n)
+  "Returns the equal temperment frequency for the nth step above (or below) the base note."
+  (* base (expt 2.0 (/ n 12.0))))
 
-(defvar *base-note* (* 440 (equal-temp 3))) ;; Middle C
+;(defvar *base-note* (* 440 (equal-temp 3))) ;; Middle C
 
-(defvar *scale-map*
-  '((-8 . -15)
-    (-7 . -13)
-    (-6 . -12)
-    (-5 . -10)
-    (-4 . -8)
-    (-3 . -7)
-    (-2 . -5)
-    (-1 . -3)
-    (0 . -1)
-    (1 . 0)
-    (2 . 2)
-    (3 . 4)
-    (4 . 5)
-    (5 . 7)
-    (6 . 9)
-    (7 . 11)
-    (8 . 12)))
+(defvar *ionian*
+  '(0 2 4 5 7 9 11))
 
-(defvar *note-map*
-  (reverse (do ((nmap nil)
-                (note 1 (1+ note)))
-               ((> note 12) nmap)
-             (setq nmap
-                   (cons
-                    (cons
-                     note
-                     (* *base-note* (equal-temp (cdr (assoc (- note 9) *scale-map*)))))
-                    nmap)))))
+(defvar *dorian*
+  '(0 2 3 5 7 9 10))
 
-(sc:defsynth tine (freq)
-  (let* ((env (sc:env-gen.kr (sc:env [1 0] [3]) :act :free))
-         (impls (sc:impulse.ar 0 0 env))
-         (res (sc:dyn-klank.ar [[freq] nil [1]] impls)))
-    (sc:out.ar 0 [res res])))
+(defvar *phrygian*
+  '(0 1 3 5 7 8 10))
 
-(defun play-score (score stretch note-map)
-  (when (consp score)
-    (format t "~S~%" score)
-    (let* ((time (* stretch (caar score)))
-           (note (cdar score))
-           (freq (cdr (assoc note note-map))))
-      (format t "~d/~f~%" note freq)
-      (sc:at (+ 1 (sc:now)) (sc:synth 'tine :freq freq))
-      (when (cdr score)
-        (format t "next~%")
-        (let ((next-time (+ (now) (* stretch (caadr score)))))
-          (sc:callback next-time #'play-score (cdr score) stretch notemap))))))
+(defvar *lydian*
+  '(0 2 4 6 7 9 11))
+
+(defvar *mixolydian*
+  '(0 2 4 5 7 9 10))
+
+(defvar *aolian*
+  '(0 2 3 5 7 8 10))
+
+(defvar *locrian*
+  '(0 1 3 5 6 8 10))
+
+(defstruct (scale (:constructor make-scale (key map)))
+  key
+  map)
+
+(defstruct (note (:constructor make-note (num oct)))
+  num
+  oct)
+
+(defun note->freq (note scale)
+  (let* ((slen (length (scale-map scale)))
+         (n (nth (mod (1- note) slen) (scale-map scale)))
+         (oct (floor (/ note slen))))
+    (when n
+      (equal-temp (scale-key scale) (+ n (* 12 oct))))))
+
+(defun play-score (score synth stretch scale-map loop-p)
+  ""
+  (labels ((schedule-note (sequence offset)
+             (let* ((note (cdar sequence))
+                    (play-time (+ offset (* stretch (caar sequence)))))
+               (sc:at play-time (sc:synth synth :note (funcall scale-map note)))
+               (if (cdr sequence)
+                   (schedule-note (cdr sequence) play-time)
+                   play-time)))
+           (scheduling-loop ()
+             (format t "scheduling loop~%")
+             (let ((loop-time (* stretch (cdr (assoc 'loop-time score)))))
+               (format t "looping with loop time: ~f~%" loop-time)
+               (do* ((offset (+ 0.1 (sc:now)) (+ offset loop-time))
+                     (keep-playing t (car loop-p)))
+                    ((not keep-playing) offset)
+                 (schedule-note (cdr (assoc 'sequence score)) offset)
+                 (sleep loop-time)
+                 (format t "keep looping? ~S~%" loop-p)))))
+    (bt:make-thread #'scheduling-loop :name "loop")))
