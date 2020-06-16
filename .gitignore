@@ -1,0 +1,3 @@
+*.fasl
+*.xcf
+/clown-score.lisp
