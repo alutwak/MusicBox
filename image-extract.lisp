@@ -274,10 +274,12 @@
 (defmethod print-element ((cluster pixel-cluster))
   (let ((m (moment cluster))
         (n (nelem cluster))
-        (d (density cluster))
+        (d (* 100 (density cluster)))
         (ps (pspace cluster)))
-    (format t "~S: ~d ~f " m n d)
-    (apply #'format (append '(t "[<~d ~d> ^~d ~dv]~%") (pixel-space->list ps)))))
+    (format t "~S: ~d pix, ~f%~%" m n d)
+    (apply #'format (append '(t "    pspace: [<~d ~d> ^~d ~dv]~%") (pixel-space->list ps)))
+    (format t "    bar: ")
+    (print-element (car (belongs-to cluster)))))
 
 (defun element-stats (elements)
   "Prints all of the clusters in a collection of clusters"
@@ -357,11 +359,13 @@
 
 (defmethod print-element ((cluster bar))
   (let ((mom (moment cluster))
-        (density (density cluster))
+        ;(density (density cluster))
         (nelem (nelem cluster))
-        (top (pixel-space-top (pspace cluster)))
-        (bottom (pixel-space-bottom (pspace cluster))))
-    (format t "~f: ~d ~f [^~f ~fv]~%" mom nelem density top bottom)))
+        (order (order cluster))
+        ;(top (pixel-space-top (pspace cluster)))
+        ;(bottom (pixel-space-bottom (pspace cluster)))
+        )
+    (format t "~d: (~f) [~d]~%" order mom nelem )))
 
 ;;; =============================== K-Means Higher Order Functions ===============================
 
@@ -458,9 +462,9 @@
 
 
 (defun extract-image (image-path &optional (pixel-thresh 10) (min-density 0.6) (min-dist 50) (min-size 50) (nbars 12))
-  (let* ((image (get-image image-path))                 ; The image
-         (loop-time (png:image-width image))            ; The loop time will be the width of the image
-         (pixels (get-nonzero-pixels im pixel-thresh))  ; Extract the pixels of interest
+  (let* ((image (get-image image-path))                         ; The image
+         (loop-time (png:image-width image))                    ; The loop time will be the width of the image
+         (pixels (get-nonzero-pixels image pixel-thresh))       ; Extract the pixels of interest
 
          ;; Cluster the pixels and sort the clusters by time (horizontal location)
          (clusters (sort (nk-means pixels min-density min-dist min-size)
@@ -472,22 +476,25 @@
                      (lambda (bar1 bar2)
                        (> (moment bar1) (moment bar2)))))
 
-         (notes nil)    ; init note list
-         (n 1))         ; init for bar orders
+         (n 1))                 ; init for bar orders
 
     ;; Assign bar orders
     (dolist (bar bars)
       (setf (order bar) n)
       (incf n))
 
+    ;; Return the sequence and loop time
     (list
      (cons 'loop-time loop-time)
-     (cons 'notes
-           (reverse
-            (dolist (note clusters notes)
-              (setq notes (cons
-                           `(,(order (car (belongs-to note)))
-                              ,(event-time note))
-                           notes))))))))
+     (cons 'tines clusters))))
 
-
+(defun create-sequence (tines)
+  (let ((last-time 0))  ; init last-time
+    (mapcar
+     (lambda (note)
+       (let ((time (event-time note))
+             (ord (order (car (belongs-to note)))))
+         (prog1
+             `(,(- time last-time) . ,ord)
+           (setq last-time time))))
+     tines)))
